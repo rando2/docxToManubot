@@ -11,7 +11,29 @@ def readMarkdown(mdfile):
         origText = [t.strip() for t in origText]
         return origText
 
-def findChanges(xmlFile):
+def writeMarkdown(text, fout):
+    with open(fout, 'w') as editedFile:
+        for line in text:
+            editedFile.write(line + '\n')
+    print("Wrote {0}".format(fout))
+
+def cleanAnnotations(text):
+    text = text.replace("~~~", "")
+    text = text.replace("***", "")
+    return text
+
+def cleanMarkdown(text):
+    text = text.replace(" #", "\n\n#")
+    text = text.replace("  ", "\n")
+    return splitSentences(text)
+
+def splitSentences(text):
+    seg = pysbd.Segmenter(language="en", clean=True)
+    return seg.segment(text)
+
+def extractChangesXML(xmlFile):
+    """Evaluates an XML file generated from a docx file to extract the text including
+    insertions and deletions added with track changes"""
     tree = ET.parse(xmlFile)
     root = tree.getroot()
     nsmap = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
@@ -35,21 +57,15 @@ def findChanges(xmlFile):
                     textblocks.append("~~~"+deletedText+"~~~")
     return textblocks
 
-def cleanAnnotations(text):
-    text = text.replace("~~~", "")
-    text = text.replace("***", "")
-    return text
-
 def modifyText(textblocks, markdown, mdi):
     """Want to replace the minimum number of characters possible to avoid issues
     with references, manubot & HTML formatting, etc."""
     markdown_text = " ".join(markdown[mdi[0]: mdi[1]+1])
-    print("new block")
-    print(markdown_text)
     for blockIndex in range(0,len(textblocks)):
-        edited_text = ""
-        original_text = ""
-        if blockIndex > 0 and textblocks[blockIndex - 1][:3] not in ["~~~", "***"]:
+        if textblocks[blockIndex][:3] not in ["~~~", "***"]:
+            # Skip the text that was not edited
+            continue
+        elif blockIndex > 0 and textblocks[blockIndex - 1][:3] not in ["~~~", "***"]:
             # If there is unedited text before (a preface)
             if textblocks[blockIndex][:3] == "~~~":
                 # For deletions, original text is preface + deleted content
@@ -72,18 +88,8 @@ def modifyText(textblocks, markdown, mdi):
         edited_text = cleanAnnotations(edited_text)
         original_text = cleanAnnotations(original_text)
         markdown_text = markdown_text.replace(original_text, edited_text)
-    print(markdown_text)
     markdown[mdi[0]:mdi[1]+1] = cleanMarkdown(markdown_text)
     return markdown
-
-def cleanMarkdown(text):
-    text = text.replace(" #", "\n\n#")
-    text = text.replace("  ", "\n")
-    return splitSentences(text)
-
-def splitSentences(text):
-    seg = pysbd.Segmenter(language="en", clean=True)
-    return seg.segment(text)
 
 def locateText(textblocks, markdown):
     """Locate the corresponding text to this section of the docx in the markdown file"""
@@ -107,45 +113,45 @@ def locateText(textblocks, markdown):
             if matchScore > bestMatch[0]:
                 bestMatch = [matchScore, mdi]
         markdown_bounds[i] = bestMatch[1]
-    modifyText(textblocks, markdown, markdown_bounds)
+    return modifyText(textblocks, markdown, markdown_bounds)
 
-def groupBlocks(textblocks, markdown):
+def groupTextBlocks(textblocks, markdown):
     """Use the mark-up in the textblocks list to determine whether we are deleting, inserting
     or replacing text. To do this, pull the most recent normal block"""
     edited = [i for i in range(len(textblocks)) if textblocks[i][:3] in ["~~~", "***"]]
     editedIndex = 0
     while editedIndex < len(edited) - 1:
-        print("index is:", editedIndex, textblocks[edited[editedIndex]])
         if editedIndex == 0: # for first edit, normal text until 2nd edit
-            locateText(textblocks[:edited[editedIndex+1]], markdown)
+            markdown = locateText(textblocks[:edited[editedIndex+1]], markdown)
         elif editedIndex == len(edited)-1: # for the last edit, normal text since 2-to-last edit
-            locateText(textblocks[edited[editedIndex-1]:], markdown)
+            markdown = locateText(textblocks[edited[editedIndex-1]:], markdown)
         else:
             # if there is a normal block before next edit
             if edited[editedIndex+1] - edited[editedIndex] > 1:
-                locateText(textblocks[edited[editedIndex-1]+1:edited[editedIndex+1]], markdown)
+                markdown = locateText(textblocks[edited[editedIndex-1]+1:edited[editedIndex+1]], markdown)
             else: # if multiple edits in a row
                 startEditing = editedIndex
                 while editedIndex < len(edited) - 1 and \
                         edited[editedIndex+1] - edited[editedIndex] == 1: #increment until hit gap
                     editedIndex +=1
                 if len(edited) - editedIndex <= 1: # if it's the last edit
-                    locateText(textblocks[edited[startEditing - 1] + 1:], markdown)
+                    markdown = locateText(textblocks[edited[startEditing - 1] + 1:], markdown)
                 else:
-                    locateText(textblocks[edited[startEditing - 1] + 1:edited[editedIndex+1]],
-                               markdown)
+                    markdown = locateText(textblocks[edited[startEditing - 1] + 1:edited[editedIndex+1]],
+                                          markdown)
         editedIndex += 1
-
-    # insertion on its own
-    # insertion next to a deletion
+    return markdown
 
 def main():
     # Pull the markdown from master
     markdown = readMarkdown('markdown_example.md')
 
     # Identify which text has stayed the same and which has changed
-    text = findChanges("./word/document.xml")
-    groupBlocks(text, markdown)
-    print(markdown)
+    text = extractChangesXML("./word/document.xml")
+
+    # Begin analyzing the XML blocks, locating each in the markdown file and replacing
+    edited_markdown = groupTextBlocks(text, markdown)
+    writeMarkdown(edited_markdown, "editedmd.md")
+
 
 main()
