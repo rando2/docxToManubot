@@ -2,26 +2,6 @@ import xml.etree.ElementTree as ET
 import docx #may be able to use normal version?
 import pysbd
 
-def readDocx(filename):
-    """Read the paragraphs of the docx file in as a list.
-    These will contain deletions but not insertions due to a quirk of python-docx
-    Input: name of docx file
-    Returns: list of paragraph text """
-    paragraphs = []
-    document = docx.Document(filename)
-    docPos = "head"
-    for para in document.paragraphs:
-        if docPos == "head":
-            if "Abstract" in para.text:
-                docPos = "body"
-                continue # remove this!
-            else:
-                continue
-        if "Additional Items" in para.text:
-            return
-        paragraphs.append(para.text)
-    return(paragraphs)
-
 def readMarkdown():
     with open("origmdMD.md", 'r') as origFile:
         # Read & format original markdown
@@ -55,23 +35,39 @@ def findChanges(xmlFile):
     return textblocks
 
 def insert(textblocks, i, markdown):
-    
+    print("INSERT")
+    # Find match to last normal block in markdown
+    normal = [blockIndex for blockIndex in range(len(textblocks)) if
+              textblocks[blockIndex][:3] not in ["~~~", "***"]]
+    last_normal = max([blockIndex for blockIndex in normal if blockIndex < i])
+    next_normal = min([blockIndex for blockIndex in normal if blockIndex > i])
+    print(last_normal, next_normal, textblocks[last_normal],
+          "".join(textblocks[last_normal+1:next_normal]),
+          textblocks[next_normal])
+
+    # if n == 0
 
 def replaceLines(textblocks, markdown):
     """Use the mark-up in the textblocks list to determine whether we are deleting, inserting
     or replacing text."""
     i = 0
+    normal = [i for i in range(len(textblocks)) if textblocks[i][:3] not in ["~~~", "***"]]
+    n_index = 0
+    print(normal)
     while i < len(textblocks):
         if textblocks[i][:3] == "~~~":
             if textblocks[i+1][:3] == "***":
-                print("replace", textblocks[i:i+2])
+                print("replace", i, normal[n_index], textblocks[i:i+2])
             else:
-                print("delete", textblocks[i])
+                print("delete", i, normal[n_index], textblocks[i])
         elif textblocks[i][:3] == "***":
             if textblocks[i+1][:3] == "~~~":
-                print("replace", textblocks[i:i+2])
+                print("replace", i, normal[n_index], textblocks[i:i+2])
             else:
-                print("insert", textblocks[i])
+                print("insert", i, normal[n_index], textblocks[i])
+                insert(textblocks, i, markdown)
+        else:
+            n_index +=1
         i +=1
 
     # insertion on its own
