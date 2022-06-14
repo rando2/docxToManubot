@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
-import docx #may be able to use normal version?
 import pysbd
+import re
+from fuzzywuzzy import fuzz
 
 def readMarkdown():
     with open("origmdMD.md", 'r') as origFile:
@@ -8,7 +9,7 @@ def readMarkdown():
         origTextRaw = origFile.read()
         origText = origTextRaw.splitlines()
         origText = [t.strip() for t in origText]
-        #print(origText)
+        return origText
 
 def findChanges(xmlFile):
     tree = ET.parse(xmlFile)
@@ -34,27 +35,70 @@ def findChanges(xmlFile):
                     textblocks.append("~~~"+deletedText+"~~~")
     return textblocks
 
-def insert(textblocks, i, markdown):
-    print("INSERT")
-    # Find match to last normal block in markdown
-    normal = [blockIndex for blockIndex in range(len(textblocks)) if
-              textblocks[blockIndex][:3] not in ["~~~", "***"]]
-    last_normal = max([blockIndex for blockIndex in normal if blockIndex < i])
-    next_normal = min([blockIndex for blockIndex in normal if blockIndex > i])
-    print(last_normal, next_normal, textblocks[last_normal],
-          "".join(textblocks[last_normal+1:next_normal]),
-          textblocks[next_normal])
+def modifyText(textblocks, markdown, mdi):
+
+
 
     # if n == 0
 
-def replaceLines(textblocks, markdown):
+def splitSentences(text):
+    seg = pysbd.Segmenter(language="en", clean=True)
+    return seg.segment(text)
+
+def locateText(textblocks, markdown):
+    #print("here's what to edit", textblocks)
+    insertions = sum([i[0:3] == "***" for i in textblocks])
+    deletions = sum([i[0:3] == "~~~" for i in textblocks])
+    print(insertions, deletions)
+
+    originalText = "".join([text for text in textblocks if (text[0:3] != "***" and not
+                                                            bool(re.search('([0-9]\.[0-9])', text)))])
+    originalText = originalText.replace("~~~","")
+    originalSentences = splitSentences(originalText)
+    for docxSentence in originalSentences:
+        bestMatch = [0, ""]
+        for markdownSentence in markdown:
+            matchScore = fuzz.partial_ratio(docxSentence, markdownSentence)
+            if matchScore > bestMatch[0]:
+                bestMatch = [matchScore, markdownSentence]
+        print(docxSentence, bestMatch)
+        print(textblocks)
+
+
+def groupBlocks(textblocks, markdown):
     """Use the mark-up in the textblocks list to determine whether we are deleting, inserting
-    or replacing text."""
-    i = 0
-    normal = [i for i in range(len(textblocks)) if textblocks[i][:3] not in ["~~~", "***"]]
-    n_index = 0
-    print(normal)
-    while i < len(textblocks):
+    or replacing text. To do this, pull the most recent normal block"""
+    edited = [i for i in range(len(textblocks)) if textblocks[i][:3] in ["~~~", "***"]]
+    editedIndex = 0
+    while editedIndex < len(edited) - 1:
+        print("index is:", editedIndex, textblocks[edited[editedIndex]])
+        if editedIndex == 0: # for first edit, normal text until 2nd edit
+            locateText(textblocks[:edited[editedIndex+1]], markdown)
+        elif editedIndex == len(edited)-1: # for the last edit, normal text since 2-to-last edit
+            locateText(textblocks[edited[editedIndex-1]:], markdown)
+        else:
+            # if there is a normal block before next edit
+            if edited[editedIndex+1] - edited[editedIndex] > 1:
+                locateText(textblocks[edited[editedIndex-1]+1:edited[editedIndex+1]], markdown)
+            else: # if multiple edits in a row
+                startEditing = editedIndex
+                while editedIndex < len(edited) - 1 and \
+                        edited[editedIndex+1] - edited[editedIndex] == 1: #increment until hit gap
+                    editedIndex +=1
+                if len(edited) - editedIndex <= 1: # if it's the last edit
+                    locateText(textblocks[edited[startEditing - 1] + 1:], markdown)
+                else:
+                    locateText(textblocks[edited[startEditing - 1] + 1:edited[editedIndex+1]],
+                               markdown)
+        editedIndex += 1
+        break
+
+
+
+
+
+
+        continue
         if textblocks[i][:3] == "~~~":
             if textblocks[i+1][:3] == "***":
                 print("replace", i, normal[n_index], textblocks[i:i+2])
@@ -79,6 +123,6 @@ def main():
 
     # Identify which text has stayed the same and which has changed
     text = findChanges("./word/document.xml")
-    replaceLines(text, markdown)
+    groupBlocks(text, markdown)
 
 main()
