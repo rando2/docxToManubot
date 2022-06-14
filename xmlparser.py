@@ -3,8 +3,8 @@ import pysbd
 import re
 from fuzzywuzzy import fuzz
 
-def readMarkdown():
-    with open("origmdMD.md", 'r') as origFile:
+def readMarkdown(mdfile):
+    with open(mdfile, 'r') as origFile:
         # Read & format original markdown
         origTextRaw = origFile.read()
         origText = origTextRaw.splitlines()
@@ -35,35 +35,79 @@ def findChanges(xmlFile):
                     textblocks.append("~~~"+deletedText+"~~~")
     return textblocks
 
+def cleanAnnotations(text):
+    text = text.replace("~~~", "")
+    text = text.replace("***", "")
+    return text
+
 def modifyText(textblocks, markdown, mdi):
+    """Want to replace the minimum number of characters possible to avoid issues
+    with references, manubot & HTML formatting, etc."""
+    markdown_text = " ".join(markdown[mdi[0]: mdi[1]+1])
+    print("new block")
+    print(markdown_text)
+    for blockIndex in range(0,len(textblocks)):
+        edited_text = ""
+        original_text = ""
+        if blockIndex > 0 and textblocks[blockIndex - 1][:3] not in ["~~~", "***"]:
+            # If there is unedited text before (a preface)
+            if textblocks[blockIndex][:3] == "~~~":
+                # For deletions, original text is preface + deleted content
+                original_text = "".join(textblocks[blockIndex - 1:blockIndex + 1])
+            elif textblocks[blockIndex][:3] == "***":
+                # For insertions, original text is just preface
+                original_text = textblocks[blockIndex - 1]
+            edited_text = "".join(textblocks[blockIndex - 1:blockIndex + 1])
+        elif blockIndex < len(textblocks) and textblocks[blockIndex + 1][:3] not in ["~~~", "***"]:
+            # If there is unedited text after
+            if textblocks[blockIndex][:3] == "~~~":
+                original_text = "".join(textblocks[blockIndex:blockIndex + 2])
+            elif textblocks[blockIndex][:3] == "***":
+                original_text = textblocks[blockIndex+1]
+            edited_text = "".join(textblocks[blockIndex:blockIndex + 2])
+        else:
+            print("need to handle case of unanchored edits")
 
+        # Clean up and make replacement
+        edited_text = cleanAnnotations(edited_text)
+        original_text = cleanAnnotations(original_text)
+        markdown_text = markdown_text.replace(original_text, edited_text)
+    print(markdown_text)
+    markdown[mdi[0]:mdi[1]+1] = cleanMarkdown(markdown_text)
+    return markdown
 
-
-    # if n == 0
+def cleanMarkdown(text):
+    text = text.replace(" #", "\n\n#")
+    text = text.replace("  ", "\n")
+    return splitSentences(text)
 
 def splitSentences(text):
     seg = pysbd.Segmenter(language="en", clean=True)
     return seg.segment(text)
 
 def locateText(textblocks, markdown):
-    #print("here's what to edit", textblocks)
-    insertions = sum([i[0:3] == "***" for i in textblocks])
-    deletions = sum([i[0:3] == "~~~" for i in textblocks])
-    print(insertions, deletions)
+    """Locate the corresponding text to this section of the docx in the markdown file"""
 
+    # Create a list of sentences from the textblocks, skipping the section numbers and
+    # any insertions (since insertions won't match to the old text)
     originalText = "".join([text for text in textblocks if (text[0:3] != "***" and not
                                                             bool(re.search('([0-9]\.[0-9])', text)))])
-    originalText = originalText.replace("~~~","")
-    originalSentences = splitSentences(originalText)
-    for docxSentence in originalSentences:
-        bestMatch = [0, ""]
-        for markdownSentence in markdown:
+    originalSentences = splitSentences(originalText.replace("~~~",""))
+
+    # Compare the first and last sentences to the markdown file to find the closest match.
+    # Save the indices of the best matches in the list of sentences from the markdown file
+    # (the textblock should correspond to a continuous block of text in the markdown file)
+    markdown_bounds = [0, 0]
+    for i in range(-1,1): #first and last, aka -1 and 0
+        docxSentence = originalSentences[i]
+        bestMatch = [0, 0]
+        for mdi in range(0,len(markdown)):
+            markdownSentence = markdown[mdi]
             matchScore = fuzz.partial_ratio(docxSentence, markdownSentence)
             if matchScore > bestMatch[0]:
-                bestMatch = [matchScore, markdownSentence]
-        print(docxSentence, bestMatch)
-        print(textblocks)
-
+                bestMatch = [matchScore, mdi]
+        markdown_bounds[i] = bestMatch[1]
+    modifyText(textblocks, markdown, markdown_bounds)
 
 def groupBlocks(textblocks, markdown):
     """Use the mark-up in the textblocks list to determine whether we are deleting, inserting
@@ -91,38 +135,17 @@ def groupBlocks(textblocks, markdown):
                     locateText(textblocks[edited[startEditing - 1] + 1:edited[editedIndex+1]],
                                markdown)
         editedIndex += 1
-        break
-
-
-
-
-
-
-        continue
-        if textblocks[i][:3] == "~~~":
-            if textblocks[i+1][:3] == "***":
-                print("replace", i, normal[n_index], textblocks[i:i+2])
-            else:
-                print("delete", i, normal[n_index], textblocks[i])
-        elif textblocks[i][:3] == "***":
-            if textblocks[i+1][:3] == "~~~":
-                print("replace", i, normal[n_index], textblocks[i:i+2])
-            else:
-                print("insert", i, normal[n_index], textblocks[i])
-                insert(textblocks, i, markdown)
-        else:
-            n_index +=1
-        i +=1
 
     # insertion on its own
     # insertion next to a deletion
 
 def main():
     # Pull the markdown from master
-    markdown = readMarkdown()
+    markdown = readMarkdown('markdown_example.md')
 
     # Identify which text has stayed the same and which has changed
     text = findChanges("./word/document.xml")
     groupBlocks(text, markdown)
+    print(markdown)
 
 main()
