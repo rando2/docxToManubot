@@ -1,6 +1,7 @@
+import re
+import argparse
 import xml.etree.ElementTree as ET
 import pysbd
-import re
 from fuzzywuzzy import fuzz
 
 def readMarkdown(mdfile):
@@ -14,8 +15,11 @@ def readMarkdown(mdfile):
 def writeMarkdown(text, fout):
     with open(fout, 'w') as editedFile:
         for line in text:
+            # Add an extra space before new sections
+            if line[:3] == "###":
+                editedFile.write('\n')
             editedFile.write(line + '\n')
-    print("Wrote {0}".format(fout))
+    print("Wrote {}".format(fout))
 
 def cleanAnnotations(text):
     text = text.replace("~~~", "")
@@ -63,15 +67,15 @@ def modifyText(textblocks, markdown, mdi):
     markdown_text = " ".join(markdown[mdi[0]: mdi[1]+1])
     for blockIndex in range(0,len(textblocks)):
         if textblocks[blockIndex][:3] not in ["~~~", "***"]:
-            # Skip the text that was not edited
+            # Skip text that was not edited
             continue
         elif blockIndex > 0 and textblocks[blockIndex - 1][:3] not in ["~~~", "***"]:
-            # If there is unedited text before (a preface)
+            # If there is unedited text before
             if textblocks[blockIndex][:3] == "~~~":
-                # For deletions, original text is preface + deleted content
+                # For deletions, original text is the leading text + deleted content
                 original_text = "".join(textblocks[blockIndex - 1:blockIndex + 1])
             elif textblocks[blockIndex][:3] == "***":
-                # For insertions, original text is just preface
+                # For insertions, original text is just leading text
                 original_text = textblocks[blockIndex - 1]
             edited_text = "".join(textblocks[blockIndex - 1:blockIndex + 1])
         elif blockIndex < len(textblocks) and textblocks[blockIndex + 1][:3] not in ["~~~", "***"]:
@@ -142,16 +146,30 @@ def groupTextBlocks(textblocks, markdown):
         editedIndex += 1
     return markdown
 
-def main():
-    # Pull the markdown from master
-    markdown = readMarkdown('markdown_example.md')
+def main(args):
+    # Read in the markdown pulled from upstream
+    markdown = readMarkdown(args.base_markdown)
 
     # Identify which text has stayed the same and which has changed
-    text = extractChangesXML("./word/document.xml")
+    text = extractChangesXML("{}/document.xml".format(args.documentXMLDir))
 
-    # Begin analyzing the XML blocks, locating each in the markdown file and replacing
+    # Begin analyzing the text blocks identified in the XML
+    # Locate each in the markdown file and replace the old text with updated text
     edited_markdown = groupTextBlocks(text, markdown)
-    writeMarkdown(edited_markdown, "editedmd.md")
+    writeMarkdown(edited_markdown, args.tempDocxMD)
 
-
-main()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('base_markdown',
+                        help='Path of the md file from upstream the docx will be compared against',
+                        type=str)
+    parser.add_argument('documentXMLDir',
+                        help='Directory containing the document.xml file generated when docx is unzipped',
+                        type=str)
+    parser.add_argument('tempDocxMD',
+                        help='Path to write the markdown file generated from the docx',
+                        type=str)
+    args = parser.parse_args()
+    main(args)
