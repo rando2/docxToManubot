@@ -23,25 +23,50 @@ docxEditAuthor='Halie Rando <halie.rando@cuanschutz.edu>'
 
 #********************************************
 # OPTIONAL VARIABLES (leave as is or change if you prefer)
-tempUpstreamMD=originalMD.md
-tempDocxMD=docxMD.md
-docxMetadataDir=file-content
-editedMarkdown=./$origMD
 new_branch=docx_$(date +"%s")
+
+#********************************************
+# Workflow Assumptions:
+# 1. The paper's body starts with an Abstract
+# 2. Rootstock front matter text describing permalink has been kept (see "# RETRIEVE MARKDOWN FROM UPSTREAM")
+# 3. Rootstock is in English
+# 4. The manuscript body ends when the references begin, which are named "References"
+#********************************************
+# CODE IS BELOW
+
+tempUpstreamMD=originalMD.md
+tempDocxMD=docx-to-manubot-tmp/docxMD.md
+docxMetadataDir=file-content
+editedMarkdown=$origMD
+
+# SET UP WORKSPACE
+mkdir docx-to-manubot-tmp
 
 # RETRIEVE MARKDOWN FROM UPSTREAM
 # Convert docx to md & retrieve markdown file from upstream based on the commit info in docx
-# If you have edited the front matter from rootstock, you should confirm that the
-# syntax used to detect the permalink (which contains the commit info used to generate the docx)
-# is the same in your manuscript
-echo pandoc -s $docx -t markdown --wrap=none -o $tempDocxMD
-python retrieveMD.py $repository $origMD $tempDocxMD $tempUpstreamMD
+# I was unable to extract the hyperlink info from the docx, which is why there is the extra
+# step of converting to markdown. If you have edited the front matter from rootstock, you
+# should confirm that the syntax used to detect the permalink (which contains the commit
+# info used to generate the docx) is the same in your manuscript
+#pandoc -s $docx -t markdown --wrap=none -o $tempDocxMD
+#python retrieveMD.py $repository $origMD $tempDocxMD $tempUpstreamMD
+
+# PREPARE DOCX FOR COMPARISON BY UNZIPPING DOCX TO XML, THEN PARSE XML
+unzip $docx -d ./docx-to-manubot-tmp/file-content
+python 01.xmlparser.py ./docx-to-manubot-tmp/file-content
+python reconstructText.py
 
 # COMPARE DOCX TO UPSTREAM
-# Extract XML from docx into working directory
 # Compare docx to upstream, store edited markdown, and remove extracted metadata
-unzip $docx -d ./$docxMetadataDir
-python xmlparser.py $origMD $docxMetadataDir $tempDocxMD
+#python $tempUpstreamMD
+
+exit
+# CHECK THAT THE PRECEEDING STEP WORKED
+if ! test $tempDocxMD
+then
+  echo Failed to convert docx file to markdown
+  exit
+fi
 
 # COMMIT CHANGES FROM DOCX
 # go to the local manubot project directory, make a new branch, add changes there
@@ -57,7 +82,7 @@ echo To push: git push upstream $new_branch
 
 # CLEAN UP TEMP
 rm -rf $docxMetadataDir
-rm $tempUpstreamMD $tempDocxMD
+#rm $tempUpstreamMD $tempDocxMD
 
 # Future functions: edit other markdown/HTML syntax and transfer comments from docx to PR (in-line
 # is probably easiest)

@@ -12,7 +12,7 @@ def main(args):
                 linkText = re.search(pattern, line)
                 commitID = linkText.group().split("@")[1]
                 commitID = commitID.replace("]","")
-                url = "https://raw.githubusercontent.com/{}}/{}/content/{}".format(
+                url = "https://raw.githubusercontent.com/{}/{}/content/{}".format(
                     args.upstreamRep, commitID, args.upstreamMD)
                 upstreamMD = requests.get(url)
                 with open(args.tempUpstreamMD, 'wb') as fout:
