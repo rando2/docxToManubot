@@ -20,24 +20,28 @@ def sentenceBySentence(originalSentences, markdown, candidateIndex):
             bestMatch = [sum(matches), i]
     return(bestMatch[1])
 
-def findBestHit(originalSentences, markdown):
+def findBestHit(originalSentences, markdown, mdi):
     numSentences = len(originalSentences)
-    mdi = 0 # markdown index
     maxScore = 0
     bestHits = list()
+    originalPara = " ".join(originalSentences)
     while mdi < (len(markdown) - numSentences):
-        markdownSentences = markdown[mdi:mdi+numSentences]
-        matchScore = fuzz.partial_ratio(originalSentences, markdownSentences)
+        markdownPara = " ".join(markdown[mdi:mdi+numSentences])
+        matchScore = fuzz.partial_ratio(originalPara, markdownPara)
         if matchScore > maxScore:
             maxScore = matchScore
-            bestHits= [mdi]
+            bestHits = [mdi]
         elif matchScore == maxScore:
             bestHits.append(mdi)
+        elif maxScore >= 95 and matchScore < maxScore:
+            # speed things up by accepting the first very strong match(es)
+            break
         mdi +=1
     return bestHits
 
-def matchSentences(textblocks, start, stop, markdown):
-    """Compare this block of edits against the markdown file upstream"""
+def matchSentences(textblocks, start, stop, markdown, mdi):
+    """Compare this block of edits against the markdown file upstream
+    Start at the last match to cut down on search space"""
     # Create sentences from blocks of text extracted from docx
     textToEdit = textblocks[start:stop]
 
@@ -45,28 +49,23 @@ def matchSentences(textblocks, start, stop, markdown):
     bool(re.search('([0-9]\.[0-9])', text)))])
     originalSentences = splitSentences(originalText.replace("~~~", ""))
 
-    bestHits = findBestHit(originalSentences, markdown)
+    bestHits = findBestHit(originalSentences, markdown, mdi)
     if len(bestHits) == 1:
         return bestHits[0]
     elif len(bestHits) == 0:
         print("No match found for")
         print(originalSentences)
-        new_start = start -1
-        #while new_start >= 0:
-        #    if
-        exit()
+        exit("matchSentences")
     else:
-        return sentenceBySentence(originalSentences, markdown, bestHits)
+        bestHit = sentenceBySentence(originalSentences, markdown, bestHits)
+        return bestHit
 
 def modifyText(textblocks, markdown, mdi):
     """Want to replace the minimum number of characters possible to avoid issues
     with references, manubot & HTML formatting, etc."""
     numSentences = len(splitSentences("".join(textblocks)))
-    try:
-        markdown_text = " ".join(markdown[mdi:mdi+numSentences])
-    except TypeError:
-        print(mdi, type(mdi), numSentences, type(numSentences))
-        exit(1)
+    markdown_text = " ".join(markdown[mdi:mdi+numSentences])
+
     # Use the annotation to assign blocks to reconstruct the original (unchanged + deleted) and edited
     # (unchanged + inserted) text
     original_text = str()
@@ -108,18 +107,19 @@ def main(args):
         textToEval = [block.rstrip() for block in filehandle.readlines()]
 
     # Evaluate each edit and replace in markdown
+    mdPos = 0
     for editIndices in textToEval:
-        print(editIndices)
+        #print(editIndices)
         # Evaluate the list of lists and retrieve the corresponding blocks of text
         start, stop = [int(i) for i in ast.literal_eval(editIndices)]
 
         # Locate each text block from docx in the markdown file
         # using [lastUneditedBlock, nextUneditedBlock) to avoid overlap
-        mdPos = matchSentences(textblocks, start, stop, markdown)
+        mdPos = matchSentences(textblocks, start, stop + 1, markdown, mdPos)
 
         # Replace the lines of the upstream markdown that match the sentences
         # derived from the edits in the docx file
-        markdown = modifyText(textToEdit, markdown, mdPos)
+        #markdown = modifyText(textblocks[start:stop+1], markdown, mdPos)
 
     print("Writing", args.mdOutput)
     writeMarkdown(markdown, args.mdOutput)

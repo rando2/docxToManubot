@@ -54,10 +54,10 @@ mkdir -p docx-to-manubot-tmp
 
 # PREPARE DOCX FOR COMPARISON BY UNZIPPING DOCX TO XML, THEN PARSE XML
 #unzip $docx -d ./docx-to-manubot-tmp/file-content
-python 01.xmlparser.py ./docx-to-manubot-tmp/file-content "$end_of_body_signifier"
-python 02.IDChanges.py
+#python 01.xmlparser.py ./docx-to-manubot-tmp/file-content "$end_of_body_signifier"
+#python 02.IDChanges.py
 python compare.py $tempUpstreamMD $tempDocxMD
-
+exit
 # COMPARE DOCX TO UPSTREAM
 # Compare docx to upstream, store edited markdown, and remove extracted metadata
 #python $tempUpstreamMD
