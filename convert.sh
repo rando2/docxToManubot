@@ -24,6 +24,7 @@ docxEditAuthor='Halie Rando <halie.rando@cuanschutz.edu>'
 #********************************************
 # OPTIONAL VARIABLES (leave as is or change if you prefer)
 new_branch=docx_$(date +"%s")
+end_of_body_signifier="Additional Items"
 
 #********************************************
 # Workflow Assumptions:
@@ -40,7 +41,7 @@ docxMetadataDir=file-content
 editedMarkdown=$origMD
 
 # SET UP WORKSPACE
-mkdir docx-to-manubot-tmp
+mkdir -p docx-to-manubot-tmp
 
 # RETRIEVE MARKDOWN FROM UPSTREAM
 # Convert docx to md & retrieve markdown file from upstream based on the commit info in docx
@@ -52,9 +53,10 @@ mkdir docx-to-manubot-tmp
 #python retrieveMD.py $repository $origMD $tempDocxMD $tempUpstreamMD
 
 # PREPARE DOCX FOR COMPARISON BY UNZIPPING DOCX TO XML, THEN PARSE XML
-unzip $docx -d ./docx-to-manubot-tmp/file-content
-python 01.xmlparser.py ./docx-to-manubot-tmp/file-content
-python reconstructText.py
+#unzip $docx -d ./docx-to-manubot-tmp/file-content
+python 01.xmlparser.py ./docx-to-manubot-tmp/file-content "$end_of_body_signifier"
+python 02.IDChanges.py
+python compare.py $tempUpstreamMD $tempDocxMD
 
 # COMPARE DOCX TO UPSTREAM
 # Compare docx to upstream, store edited markdown, and remove extracted metadata
