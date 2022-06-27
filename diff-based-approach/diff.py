@@ -1,4 +1,4 @@
-from textFunctions import *
+from textFunctionsDiff import *
 import argparse
 import re
 import ast
@@ -75,11 +75,18 @@ def parseDiffSyntax(lines):
 def main(args):
     origMarkdown = readMarkdown(args.baseFile)
 
-    with open(args.diffFile, 'r') as diffFile:
-        diff = diffFile.read()
-        diff = diff.splitlines()
-    replacements = parseDiffSyntax(diff[3:])
-    replaceText(replacements, origMarkdown)
+    modified = list()
+    with open(args.diffFile, "r") as diffFile:
+        text = splitSentences(diffFile.read())
+        print(text)
+    #for i in range(0,len(text)):
+    #    line = text[i]
+    #    if re.search(r"\[-|-\]|\{\+|\+\}", line):
+    #        modified.append([i, line])
+    #for m in modified:
+    #    print(m)
+    #replacements = parseDiffSyntax(diff[3:])
+    #replaceText(replacements, origMarkdown)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-from textFunctions import *
+from textFunctionsDiff import *
 import argparse
 
 def main(args):
