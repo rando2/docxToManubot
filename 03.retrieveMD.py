@@ -8,23 +8,20 @@ def main(args):
         lines = fullText.splitlines()
         for line in lines:
             if "permalink" in line:
-                pattern = 'was automatically generated from \[(\S*)\]'
+                pattern = '[^\(]\[(\S+)\]+?'
                 linkText = re.search(pattern, line)
-                commitID = linkText.group().split("@")[1]
-                commitID = commitID.replace("]","")
+                rep, commitID = linkText.group(1).split("\@")
                 url = "https://raw.githubusercontent.com/{}/{}/content/{}".format(
-                    args.upstreamRep, commitID, args.upstreamMD)
+                    rep, commitID, args.upstreamMD)
                 upstreamMD = requests.get(url)
                 with open(args.tempUpstreamMD, 'wb') as fout:
                     fout.write(upstreamMD.content)
+                exit(0)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('upstreamRep',
-                        help='Location of the upstream repository, e.g., greenelab/covid19-review',
-                        type=str)
     parser.add_argument('upstreamMD',
                         help='Name of the upstream markdown file, e.g., 10.diagnostics.md',
                         type=str)

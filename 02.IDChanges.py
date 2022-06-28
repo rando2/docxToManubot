@@ -1,4 +1,6 @@
 from textFunctions import *
+import re
+import argparse
 
 def selectBlocksToSearch(textblocks):
     """Use the mark-up in the textblocks list to create blocks of unedited text surrounding edited text
@@ -9,13 +11,13 @@ def selectBlocksToSearch(textblocks):
     lastNormal = int() # track indices of normal blocks
     i=0
     while i < len(textblocks):
-        if textblocks[i][:3] not in ["~~~", "***"]:
+        if not re.search(r"\[-|-\]|\{\+|\+\}", textblocks[i]):
             lastNormal = i
         else: # for modified blocks
             blockRange = [0, 0]
             if lastNormal >= 0:
                 blockRange[0] = lastNormal # last normal block, or default of 0 (beginning)
-                
+
             nextNormal = findNextNormal(textblocks, i)
             if nextNormal < 0: # will return negative if normal not found
                 blockRange[1] = len(textblocks)
@@ -28,14 +30,25 @@ def selectBlocksToSearch(textblocks):
         i += 1
     return blocksToEvaluate
 
-def main():
+def main(args):
     # Read in the textblocks parsed from XML in previous step
-    with open('docx-to-manubot-tmp/textblocks.txt', 'r') as filehandle:
+    with open(args.tempTextblocks, 'r') as filehandle:
         textblocks = filehandle.readlines()
 
     # Identify the range of indices that correspond to edits
     textIndices = selectBlocksToSearch(textblocks)
-    writeList(textIndices, "textIndices.txt")
+    with open(args.tempIndices, 'w') as filehandle:
+        filehandle.writelines("%s\n" % i for i in textIndices)
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('tempTextblocks',
+                        help='temp text file to store textblocks pulled from diff',
+                        type=str)
+    parser.add_argument('tempIndices',
+                        help='temp text file to store indices of changes pulled from diff',
+                        type=str)
+    args = parser.parse_args()
+    main(args)

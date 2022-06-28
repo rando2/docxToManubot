@@ -2,10 +2,6 @@
 
 # INPUTS (USER MUST DEFINE)
 
-# Where is the repository for this manubot project located on github?
-# Example: greenelab/covid19-review
-repository=greenelab/covid19-review
-
 # Where is your local git repo associated with the manubot project?
 # Example: /Users/mycomputer/manubot/covid19-review
 localProjectDir=/Users/halierando/Dropbox/UPenn/COVID-19/covid19-review
@@ -21,42 +17,42 @@ docx=./diagnostics-manuscript\(1\).docx
 # Please put this in the format of git --author, i.e. 'Name <email>
 docxEditAuthor='Halie Rando <halie.rando@cuanschutz.edu>'
 
+# Sections to skip, other than front and back matter
+# Change to simply check if this file exists, add to readme
+toSkip=sectionsToSkip.txt
+
 #********************************************
 # OPTIONAL VARIABLES (leave as is or change if you prefer)
 new_branch=docx_$(date +"%s")
-end_of_body_signifier="Additional Items"
+tmp=tmp
 
 #********************************************
 # Workflow Assumptions:
 # 1. The paper's body starts with an Abstract
 # 2. Rootstock front matter text describing permalink has been kept (see "# RETRIEVE MARKDOWN FROM UPSTREAM")
-# 3. Rootstock is in English
-# 4. The manuscript body ends when the references begin, which are named "References"
+# 3. Currently, set up for manuscripts built from single markdown files
+# 4. If sections besides front matter and back matter should be skipped, specify names in sectionsToSkip.txt
 #********************************************
-# CODE IS BELOW
-
-tempUpstreamMD=originalMD.md
-tempDocxMD=docx-to-manubot-tmp/docxMD.md
-docxMetadataDir=file-content
-editedMarkdown=$origMD
-
 # SET UP WORKSPACE
-mkdir -p docx-to-manubot-tmp
+mkdir -p $tmp
+
+# CREATE MARKDOWN FROM WORD
+#pandoc -s $docx -t markdown --wrap=none --reference-links --track-changes=all --markdown-headings=atx -o $tmp/docxAll.md
+#pandoc -s $docx -t markdown --wrap=none --reference-links --track-changes=reject --markdown-headings=atx -o $tmp/docxNone.md
+
+# Diff and identify differences
+#wdiff $tmp/docxNone.md $tmp/docxAll.md > $tmp/diff.txt
+#python 01.cropDiff.py $toSkip $tmp/diff.txt $tmp/textblocks.txt
+#python 02.IDChanges.py $tmp/textblocks.txt $tmp/textIndices.txt
 
 # RETRIEVE MARKDOWN FROM UPSTREAM
-# Convert docx to md & retrieve markdown file from upstream based on the commit info in docx
-# I was unable to extract the hyperlink info from the docx, which is why there is the extra
-# step of converting to markdown. If you have edited the front matter from rootstock, you
-# should confirm that the syntax used to detect the permalink (which contains the commit
-# info used to generate the docx) is the same in your manuscript
-#pandoc -s $docx -t markdown --wrap=none -o $tempDocxMD
-#python retrieveMD.py $repository $origMD $tempDocxMD $tempUpstreamMD
+# Uses commit info in docx to retrieve appropriate head
+#python 03.retrieveMD.py $origMD $tmp/docxNone.md $tmp/upstream.md
 
-# PREPARE DOCX FOR COMPARISON BY UNZIPPING DOCX TO XML, THEN PARSE XML
-#unzip $docx -d ./docx-to-manubot-tmp/file-content
-#python 01.xmlparser.py ./docx-to-manubot-tmp/file-content "$end_of_body_signifier"
-#python 02.IDChanges.py
-python compare.py $tempUpstreamMD $tempDocxMD
+# APPLY CHANGES TO HEAD
+python recompare.py $tmp/upstream.md $tmp/textblocks.txt $tmp/textIndices.txt
+#python 03.compareText.py $tempUpstreamMD
+#python 04.writeMarkdown.py $tempUpstreamMD $tempDocxMD
 exit
 # COMPARE DOCX TO UPSTREAM
 # Compare docx to upstream, store edited markdown, and remove extracted metadata
