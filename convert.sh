@@ -50,7 +50,7 @@ mkdir -p $tmp
 #python 03.retrieveMD.py $origMD $tmp/docxNone.md $tmp/upstream.md
 
 # APPLY CHANGES TO HEAD
-python recompare.py $tmp/upstream.md $tmp/textblocks.txt $tmp/textIndices.txt
+python recompare.py $tmp/upstream.md $tmp/textblocks.txt $tmp/textIndices.txt $tmp/matchedText.txt
 #python 03.compareText.py $tempUpstreamMD
 #python 04.writeMarkdown.py $tempUpstreamMD $tempDocxMD
 exit
