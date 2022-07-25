@@ -44,6 +44,7 @@ def main(args):
     with open(args.tempDiff, 'r') as diffFile:
         text = diffFile.readlines()
     text = trimTextblocks(text, readSectionNames(args.sectionsToSkip))
+
     with open(args.tempTextblocks, 'w') as filehandle:
         filehandle.writelines("%s" % i for i in text)
 

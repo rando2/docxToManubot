@@ -3,6 +3,7 @@ import argparse
 from fuzzywuzzy import fuzz
 import re
 import ast
+import pandas as pd
 
 def sentenceBySentence(originalSentences, markdownParaList):
     """Compare each sentence to identify the better hit. This will ensure that
@@ -36,7 +37,7 @@ def findBestHit(originalSentences, markdown, mdi):
         elif maxScore >= 95 and matchScore < maxScore:
             # speed things up by accepting the first very strong match(es)
             break
-        mdi +=1
+        mdi += 1
     return bestHits, mdi
 
 def genRawText(edTextBlocks):
@@ -58,7 +59,7 @@ def genRawText(edTextBlocks):
 def genOrigSentences(blocks, start, stop):
     # Create sentences from blocks of text extracted from docx
     originalText = "".join([text for text in blocks[start:stop] if
-                            (text[0:3] != "***" and not
+                            (text[0:3] != "{+" and not
                             bool(re.search('([0-9]\.[0-9])', text)))])
     print(originalText)
     return splitSentences(originalText.replace("~~~", ""))
@@ -101,27 +102,73 @@ def main(args):
     # algorithm used to define sentences in the docx text so that the formatting will be
     # the same across documents. When we actually replace text in markdown, we won't do this
     # pre-processing step -- it's just for finding a match across documents
-    markdown = fuzzFriendlyMD(readMarkdown(args.baseMarkdown))
+
+    # Read in markdown pulled from upstream & reformat to match heatmap
+    upstreamMD = readMarkdown(args.baseMarkdown)
+    upstreamParagraphs = reformatMarkdown(upstreamMD)
 
     # Read in list of lists indicating the ranges of indices that correspond to edits
     # from 01. and 02.
-    with open('docx-to-manubot-tmp/textblocks.txt', 'r') as filehandle:
+    with open('tmp/textblocks.txt', 'r') as filehandle:
         textblocks = filehandle.readlines()
-    with open('docx-to-manubot-tmp/textIndices.txt', 'r') as filehandle:
-        textToEval = [block.rstrip() for block in filehandle.readlines()]
+    textblocks = [b for b in textblocks if b != "\n"]
+
+    #with open('docx-to-manubot-tmp/textIndices.txt', 'r') as filehandle:
+    #    textToEval = [block.rstrip() for block in filehandle.readlines()]
+    change = re.compile("(\[-.+?-\]*) (\{\+.*?\..*?\+\})")
+
+    # Read in mapping of textblocks onto upstream paragraphs
+    matches = pd.read_csv('tmp/max.csv', index_col = 0)
 
     # Evaluate each edit and replace in markdown
     mdPos = 0
     hits = list()
-    for editIndices in textToEval:
-        #print(editIndices)
+    editedBlocks = []
+    for i in range(0, len(textblocks)):
+
+        block = textblocks[i]
+        if i == len(textblocks) - 1: # last block
+            match, matches = matches.iloc[i].match, len(textblocks)
+        else:
+            match, matchplus = matches.iloc[i].match, matches.iloc[i+1].match
+
+        if matchplus > match:
+            matchedPara = "".join(upstreamParagraphs[match:matchplus])
+        else:
+            matchedPara = upstreamParagraphs[match]
+
+        candidateSentences = splitSentences(matchedPara)
+        print("text", textblocks[i])
+        print("markdown", candidateSentences)
+
+        for (square, curly) in re.findall(change, block):
+
+            edits = re.findall("\[(.*?\].*?)\}(.*?)\+\}", curly)
+            for edit in edits:
+                print(edit)
+            exit(0)
+            #print([fuzz.partial_ratio(square, mdSentence) for mdSentence in candidateSentences])
+            #print("***")
+            #print(block)
+            #print(square, curly)
+        editedBlocks.append(block)
+
+            #origText = re.sub(r'-\]|\[-', "", square)
+            #heatmap = [fuzz.partial_ratio(origText, s) for s in candidateSentences]
+            #if sum([x == max(heatmap) for x in heatmap]) == 1:
+            #    print(block)
+            #    print(origText, curly)
+            #    print(candidateSentences[heatmap.index(max(heatmap))])
+            #    exit(0)
+
         # Evaluate the list of lists and retrieve the corresponding blocks of text
-        start, stop = [int(i) for i in ast.literal_eval(editIndices)]
+        #start, stop = [int(i) for i in ast.literal_eval(editIndices)]
 
         # Locate each text block from docx in the markdown file
         # using [lastUneditedBlock, nextUneditedBlock) to avoid overlap
-        hit, mdPos = matchSentences(textblocks, start, stop + 1, markdown, mdPos)
-        hits.append([start, stop, mdPos])
+        ##hit, mdPos = matchSentences(textblocks, start, stop + 1, markdown, mdPos)
+        #hits.append([start, stop, mdPos])
+    exit(0)
     writeList(hits, "matchIndices.txt")
 
 if __name__ == '__main__':

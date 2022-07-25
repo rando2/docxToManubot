@@ -14,14 +14,14 @@ origMD=10.diagnostics.md
 
 ############################################################
 # docx-TC to markdown
-pandoc -s acceptAll.docx -t markdown -o docxMD.md
-python minimalproc.py docxMD.md
+#pandoc -s acceptAll.docx -t markdown -o docxMD.md
+#python minimalproc.py docxMD.md
 
 # docx-Orig to markdown
-pandoc -s base.docx -t markdown -o baseDocx.md
-python minimalproc.py baseDocx.md
+#pandoc -s base.docx -t markdown -o baseDocx.md
+#python minimalproc.py baseDocx.md
 
-mdiff -W baseDocx.md docxMD.md > diff.txt
+wdiff baseDocx.md docxMD.md > diff.txt
 
 #python retrieveMD.py $repository $origMD $tempDocxMD originalMD.md
 

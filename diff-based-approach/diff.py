@@ -76,9 +76,7 @@ def main(args):
     origMarkdown = readMarkdown(args.baseFile)
 
     modified = list()
-    with open(args.diffFile, "r") as diffFile:
-        text = splitSentences(diffFile.read())
-        print(text)
+
     #for i in range(0,len(text)):
     #    line = text[i]
     #    if re.search(r"\[-|-\]|\{\+|\+\}", line):

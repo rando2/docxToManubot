@@ -2,8 +2,10 @@ import ast
 from textFunctions import *
 from statsFunctions import *
 import argparse
-from fuzzywuzzy import fuzz
 import spacy
+import pandas as pd
+import numpy as np
+import seaborn as sns
 
 def reconstructOrig(text):
     # Find references and track changes metadata
@@ -19,6 +21,8 @@ def reformatMarkdown(markdown):
     paragraphs = list()
     currentPara = []
     for line in markdown:
+        # Remove markdown comments that won't appear in docx
+        line = re.sub("<!--.*?-->+", "", line)
         currentPara.append(line)
         # look for lines that are only whitespace
         if not re.search(r"\S", line):
@@ -26,25 +30,36 @@ def reformatMarkdown(markdown):
             currentPara = []
     return paragraphs
 
-def findOriginal(editedDoc, upstreamDocs, lastParaNum = 0, runData = None):
+def heatmap(docxSentence, upstreamDocs):
     matches = list()
+    for upstreamS in upstreamDocs:
+        if len(upstreamS) == 0:
+            matches.append(float("nan"))
+        else:
+            matches.append(docxSentence.similarity(upstreamS))
+    return matches
+
+def findOriginal(docxSentence, upstreamDocs, startMD =0, runData = None):
+    matches = list()
+    print(docxSentence)
+    for upstreamS in upstreamDocs:
+        if len(upstreamS) == 0:
+            matches.append(float("nan"))
+        else:
+            matches.append(docxSentence.similarity(upstreamS))
+    return matches
+    maxScore = np.nanmax(matches)
     if runData is None:
-        for p in upstreamDocs:
-            matches.append(editedDoc.similarity(p))
-        print(matches)
-        return matches.index(max(matches)), initStats(matches)
+        runData = initStats(matches)
     else:
-        for paraI in range(lastParaNum+1 ,len(upstreamDocs)):
-            match = editedDoc.similarity(upstreamDocs[paraI])
-            runData = updateStats(runData, match)
-            matches.append(match)
-            z = retrieveZ(runData, match)
-            print(match, z)
-            if z >= 2:
-                return paraI, runData
-        maxScore = max(matches)
-        z = retrieveZ(runData, maxScore)
-        return lastParaNum + matches.index(max(matches)), runData
+        runData = updateStats(runData, maxScore)
+    z = retrieveZ(runData, maxScore)
+    if matches.index(maxScore) < startMD:
+        print([m for m in matches if m > 0.9])
+        # calc standard deviation?
+        print(maxScore, z)
+        print(upstreamS)
+    return  + matches.index(maxScore), runData
 
 def main(args):
     nlp = spacy.load('en_core_web_lg')
@@ -52,17 +67,33 @@ def main(args):
     # Read in markdown pulled from upstream
     upstreamMD = readMarkdown(args.baseMarkdown)
     upstreamParagraphs = reformatMarkdown(upstreamMD)
-    upstreamDocs = [nlp(p) for p in upstreamParagraphs]
+    upstreamDocs = [nlp(sentence) for sentence in upstreamMD]
 
     # Read in textblocks and indices of changes as identified in two previous steps
     with open(args.tempTextblocks, 'r') as filehandle:
         textblocks = filehandle.readlines()
-    with open(args.tempIndices, 'r') as filehandle:
-        textToEval = [block.rstrip() for block in filehandle.readlines()]
 
+    docxindex = 0
+    heatmapScores = dict()
+    for block in textblocks:
+        text = " ".join(block)
+        text = reconstructOrig(text)
+        text = splitSentences(text)
+
+        for i in range(0, len(text)):
+            docxSentenceDoc = nlp(text[i])
+            heatmapScores[docxindex] = heatmap(docxSentenceDoc, upstreamDocs)
+            docxindex += 1
+    heatmapdf = pd.DataFrame.from_dict(heatmapScores, orient='index')
+    heatmapdf.to_csv("heatmap.csv")
+    print(sns.heatmap(heatmapdf, annot=True))
+
+    #with open(args.tempIndices, 'r') as filehandle:
+    #    textToEval = [block.rstrip() for block in filehandle.readlines()]
+    """
     # Examining each paragraph that contains edits
     companionParas = list()
-    startPara = 0
+    startMD = 0
     runData = None
     previous = 0
     for indexNum in range(0, len(textToEval)):
@@ -76,29 +107,30 @@ def main(args):
         # Pull text in the range of the indices
         text = " ".join(textblocks[start:stop])
         text = reconstructOrig(text)
+        text = splitSentences(text)
 
-        # If inserting paragraph breaks, can end up with short paragraphs
-        # Better to do this as regex for non-white space most likely
-        # 5 words is just a guess for a good number to achieve a unique match
-        if len(re.findall("(\w+)", text)) < 5:
-            previous = 1
-            continue
-        else:
-            previous = 0
-
-        # Pull the corresponding paragraph from markdown
-        if startPara == 0:
-            startPara, runData = findOriginal(nlp(text), upstreamDocs)
-        else:
-            startPara, runData = findOriginal(nlp(text), upstreamDocs, startPara, runData)
-        print(text)
-        companionParas.append([nlp(text), upstreamParagraphs[startPara]])
-
+        addText = ""
+        heatmapScores = dict()
+        for i in range(0, len(text)):
+            docxSentenceDoc = nlp(text[i])
+            heatmapScores[i] = heatmap(docxSentenceDoc, upstreamDocs)
+            #testSentence = addText + docxSentence
+            #if len(re.findall("(\w+)", testSentence)) >= 5:
+            #    if startMD == 0:
+            #        startMD, runData = findOriginal(nlp(testSentence), upstreamDocs)
+            #    else:
+            #        startMD, runData = findOriginal(nlp(testSentence), upstreamDocs, startMD, runData)
+            #    companionParas.append([testSentence, upstreamMD[startMD]])
+            #    addText = ""
+            #else:
+            #    addText = testSentence
+        heatmapdf = pd.DataFrame.from_dict(heatmapScores, orient='index')
+        heatmapdf.to_csv("heatmap.csv")
+        sns.heatmap(heatmapdf, annot=True)
     # Write to temporary file
-    with open(args.matchedPara, 'w') as filehandle:
-        filehandle.writelines("%s\n" % i for i in companionParas)
-#change = re.compile("(\[-.+?-\]*) (\{\+.*?\+\})")
-#for (square, curly) in re.findall(change, text):
+    #with open(args.matchedPara, 'w') as filehandle:
+    #    filehandle.writelines("%s\n" % i for i in companionParas)
+
 
 
 if __name__ == '__main__':

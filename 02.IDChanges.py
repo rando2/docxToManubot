@@ -40,6 +40,8 @@ def main(args):
     with open(args.tempIndices, 'w') as filehandle:
         filehandle.writelines("%s\n" % i for i in textIndices)
 
+    # Extract a list of contributors & compare to input file listing word x github identifiers
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=__doc__,
